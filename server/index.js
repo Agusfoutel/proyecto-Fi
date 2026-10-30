@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { db, tx } from './db.js';
 import { hashPassword, verifyPassword, startSession, loadSession, endSession, tooManyAttempts } from './auth.js';
@@ -322,6 +323,16 @@ app.use((err, req, res, next) => {
 });
 
 initPush();
-app.listen(PORT, HOST, () => {
-  console.log(`fino corriendo en http://localhost:${PORT}`);
-});
+
+// Si no nos dicen el puerto, escuchamos en los que suelen usar los paneles/Docker,
+// así la app responde aunque el contenedor esté mapeado a cualquiera de ellos.
+const ports = process.env.PORT ? [PORT] : [3000, 8080, 80];
+let failed = 0;
+for (const port of ports) {
+  const server = http.createServer(app);
+  server.on('error', (err) => {
+    console.warn(`[fino] no pude usar el puerto ${port}: ${err.code || err.message}`);
+    if (++failed === ports.length) process.exit(1);
+  });
+  server.listen(port, HOST, () => console.log(`fino corriendo en http://localhost:${port}`));
+}
